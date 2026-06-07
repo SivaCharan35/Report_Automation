@@ -1,0 +1,73 @@
+# ── Secrets & credentials ────────────────────────────────────────────────
+.env
+.env.local
+*.pem
+*.key
+# Postman collection — may contain auth tokens / report IDs
+Export Collection.postman_collection*.json
+
+# ── Python ───────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Pipeline outputs (large, regenerable) ────────────────────────────────
+# Every pipeline run drops a Report_YYYYMMDD_HHMMSS/ folder in here; these
+# can grow to hundreds of MB and are reproducible from the code + inputs.
+Report_Data/
+
+# ── Large input data (proprietary / site-specific) ───────────────────────
+# COG rasters and historical climate JSONs are big and often client-data.
+# Keep the directory structure with a .gitkeep but exclude the heavy files.
+COG/Flood/*.tif
+COG/Heat/*.tif
+COG/Flood/*.tiff
+COG/Heat/*.tiff
+COG/roads/*.geojson
+COG/waterline/*.geojson
+COG/**/*.geojson
+
+# Historical climate data (site-specific JSON blobs)
+Historical_Plots/
+
+# Per-site building GeoJSONs — may contain client data
+Input_Files/*.geojson
+
+# Live API response snapshot — contains real report data
+api_response.json
+
+# ── Legacy / parked work ─────────────────────────────────────────────────
+z. junk - old/
+0. 0. EDMP/
+
+# ── Generated docs that aren't authoritative ─────────────────────────────
+# The feedback xlsx IS authoritative (kept); the comparison docs are run
+# artefacts (excluded).
+Report_Data/*.docx
+Report_Data/*.xlsx
+
+# ── Internal feedback PDFs ───────────────────────────────────────────────
+BE-ML Report automation notes.pdf
+
+# ── Word templates (binary, kept locally only) ───────────────────────────
+Resilience_Assessment_revised_template*.docx
+
+# ── IDE / OS noise ───────────────────────────────────────────────────────
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+
+# ── Claude Code session state ────────────────────────────────────────────
+.claude/settings.local.json

@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk 'NR>=143 && NR<=260' \"c:/Users/siva charan/Desktop/0. HHMD/Export Collection.postman_collection 6.json\")",
+      "Bash(awk 'NR>=746 && NR<=880' \"c:/Users/siva charan/Desktop/0. HHMD/Export Collection.postman_collection 6.json\")",
+      "Bash(awk 'NR>=190 && NR<=250' \"c:/Users/siva charan/Desktop/0. HHMD/Export Collection.postman_collection 6.json\")",
+      "Bash(awk 'NR>=240 && NR<=260' \"c:/Users/siva charan/Desktop/0. HHMD/Export Collection.postman_collection 6.json\")",
+      "Bash(awk 'NR>=1106 && NR<=1200' \"c:/Users/siva charan/Desktop/0. HHMD/Export Collection.postman_collection 6.json\")",
+      "Bash(awk 'NR>=1197 && NR<=1340' \"c:/Users/siva charan/Desktop/0. HHMD/Export Collection.postman_collection 6.json\")",
+      "Bash(awk 'NR>=1291 && NR<=1420' \"c:/Users/siva charan/Desktop/0. HHMD/Export Collection.postman_collection 6.json\")",
+      "Bash(awk 'NR>=1515 && NR<=1600' \"c:/Users/siva charan/Desktop/0. HHMD/Export Collection.postman_collection 6.json\")",
+      "Bash(awk 'NR>=1 && NR<=50' \"c:/Users/siva charan/Desktop/0. HHMD/Report_Data/Report_20260428_004251/ara_intro.json\")",
+      "Bash(awk 'NR==245' \"c:/Users/siva charan/Desktop/0. HHMD/Export Collection.postman_collection 6.json\")",
+      "Bash(grep -oE '\\\\\\\\\\\\\\\\\"sub_section\\\\\\\\\\\\\\\\\"[^,]+|\\\\\\\\\\\\\\\\\"section_id\\\\\\\\\\\\\\\\\"[^,]+|\\\\\\\\\\\\\\\\\"order_index\\\\\\\\\\\\\\\\\"[^,]+|\\\\\\\\\\\\\\\\\"section_type\\\\\\\\\\\\\\\\\"[^,]+|\\\\\\\\\\\\\\\\\"flag_sub_section\\\\\\\\\\\\\\\\\"[^,]+|\\\\\\\\\\\\\\\\\"is_custom\\\\\\\\\\\\\\\\\"[^,]+|\\\\\\\\\\\\\\\\\"name\\\\\\\\\\\\\\\\\"[^,]+')",
+      "Bash(sed 's/\\\\\\\\n/\\\\n/g')",
+      "Bash(python -c ' *)",
+      "Bash(awk 'NR<544' \"c:/Users/siva charan/Desktop/0. HHMD/PIPELINE_FLOW.md\" > /tmp/head.md && wc -l /tmp/head.md)",
+      "Bash(cat /tmp/head.md /tmp/tail.md > \"c:/Users/siva charan/Desktop/0. HHMD/PIPELINE_FLOW.md\" && wc -l \"c:/Users/siva charan/Desktop/0. HHMD/PIPELINE_FLOW.md\")",
+      "Read(//c/tmp/**)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
+    ]
+  }
+}
