@@ -123,15 +123,15 @@ _LAYER_CATALOGUE: list[tuple] = [
      "A.1(a)", "app_dem.png",        "terrain",    "Elevation (m)",          "percentile_inverse"),
     ("twi",        "Flood", "Topographic Wetness Index (TWI)",
      "A.1(b)", "app_twi.png",        "Blues",      "TWI",                    "percentile_normal"),
-    ("impervious", "Flood", "Impervious Surface Cover",
+    ("impervious", "Both", "Impervious Surface Cover",
      "A.1(c)", "app_impervious.png", "RdYlGn_r",  "Impervious Cover (0–1)", _IMPERVIOUS_BINS),
-    ("ndvi", "Heat", "Normalised Difference Vegetation Index (NDVI)",
+    ("ndvi", "Both", "Normalised Difference Vegetation Index (NDVI)",
      "A.2(a)", "app_ndvi.png", "RdYlGn",   "NDVI",   _NDVI_BINS),
     ("ndbi", "Heat", "Normalised Difference Built-up Index (NDBI)",
      "A.2(b)", "app_ndbi.png", "RdYlGn_r", "NDBI",   _NDBI_BINS),
     ("lst",  "Heat", "Land Surface Temperature (LST)",
      "A.3",    "app_lst.png",  "RdYlBu_r", "LST (°C)", "lst_auto"),
-    ("lulc", "Heat", "Land Use / Land Cover (LULC)",
+    ("lulc", "Both", "Land Use / Land Cover (LULC)",
      "A.4",    "app_lulc.png", "categorical", "LULC Class", "categorical"),
 ]
 
@@ -894,7 +894,18 @@ def _process_raster_layer(
 ) -> dict | None:
     import rasterio
 
-    tif = _find_tif(cog_dir / hazard, key)
+    # "Both" layers (e.g. NDVI, LULC) exist in whichever COG subfolder is
+    # present.  Try Flood first, then Heat.  The effective_hazard is derived
+    # from risk_for so the Claude prompt uses the right perspective.
+    if hazard == "Both":
+        tif = _find_tif(cog_dir / "Flood", key) or _find_tif(cog_dir / "Heat", key)
+        effective_hazard = site_info.get("risk_for", "Flood") or "Flood"
+        if effective_hazard not in ("Flood", "Heat", "Both"):
+            effective_hazard = "Flood"
+    else:
+        tif = _find_tif(cog_dir / hazard, key)
+        effective_hazard = hazard
+
     if tif is None:
         logger.warning("No TIF for layer '%s' in %s", key, cog_dir / hazard)
         return None
@@ -952,7 +963,7 @@ def _process_raster_layer(
         logger.error("Susceptibility failed for %s: %s", key, exc)
 
     stats  = _compute_stats(data_raw)
-    impact = _ask_claude_raster(display_name, hazard, stats, susc, site_info, key)
+    impact = _ask_claude_raster(display_name, effective_hazard, stats, susc, site_info, key)
     if impact is None:
         impact = _LAYER_IMPACT_FALLBACK.get(key, "")
 
@@ -1060,6 +1071,7 @@ def _run_appendices(ctx: dict) -> dict:
         "site_name":     ctx.get("site_name", ctx.get("area_name", "the assessed site")),
         "city":          ctx.get("city", ""),
         "country":       ctx.get("country", ""),
+        "risk_for":      risk_for,
         "flood_profile": flood_profile,
         "flood_overall": flood_overall,   # 'critical' | 'elevated' | 'moderate' | 'low'
         "heat_profile":  heat_profile,
@@ -1076,6 +1088,10 @@ def _run_appendices(ctx: dict) -> dict:
         if hazard == "Flood" and risk_for not in ("Flood", "Both"):
             continue
         if hazard == "Heat" and risk_for not in ("Heat", "Both"):
+            continue
+        # "Both" layers (NDVI, LULC) run for any risk_for — skipped only when
+        # neither flood nor heat is applicable (shouldn't happen in practice).
+        if hazard == "Both" and risk_for not in ("Flood", "Heat", "Both"):
             continue
         logger.info("  Appendix raster layer: %s (%s)", key, hazard)
         result = _process_raster_layer(
