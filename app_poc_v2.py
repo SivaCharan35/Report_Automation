@@ -127,7 +127,7 @@ def _load_pipeline_config(
     """
     payload: dict | None = None
 
-    if not offline:
+    if False :
         url = _build_api_url(api_url, area)
         try:
             payload = _fetch_api(url)
