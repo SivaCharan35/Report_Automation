@@ -93,35 +93,50 @@ def _detect_geojson(directory: Path, keyword: str) -> Path | None:
 # Risk map generation  (same logic as scripts/3_risk_assessment.py)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _generate_risk_map(geojson_path: Path, out_path: Path, title: str) -> None:
+# Exposure map: score 1 (green) → 5 (red) — matches app legend colours.
+_EXPOSURE_LEGEND = [
+    (1, "1 — Very Low",  ( 76/255, 235/255,  52/255)),
+    (2, "2 — Low",       (235/255, 235/255,  52/255)),
+    (3, "3 — Moderate",  (235/255, 183/255,  52/255)),
+    (4, "4 — High",      (235/255, 143/255,  52/255)),
+    (5, "5 — Very High", (235/255,  52/255,  52/255)),
+]
+
+
+def _generate_risk_map(geojson_path: Path, out_path: Path, title: str,
+                       view_pad: float | None = None) -> None:
+    from core.map_chrome import (
+        apply_map_chrome, expand_view_bounds, place_legend_right, save_map_figure,
+    )
+
     gdf     = gpd.read_file(geojson_path)
     gdf["facecolor"] = gdf["risk_score"].apply(score_to_rgba)
     gdf_web = gdf.to_crs(epsg=3857)
+    b = gdf_web.total_bounds
+    data_bounds = (b[0], b[1], b[2], b[3])
+    extent = expand_view_bounds(data_bounds, view_pad)
 
-    fig, ax = plt.subplots(figsize=(14, 12))
-    gdf_web.plot(ax=ax, color=list(gdf_web["facecolor"]),
-                 edgecolor="black", linewidth=0.5)
-    cx.add_basemap(ax, source=cx.providers.Esri.WorldImagery)
+    fig, ax = plt.subplots(figsize=(11, 9))
+    ax.set_xlim(extent[0], extent[2])
+    ax.set_ylim(extent[1], extent[3])
+    cx.add_basemap(ax, source=cx.providers.Esri.WorldImagery, zorder=0)
+    gdf_web.plot(
+        ax=ax,
+        color=list(gdf_web["facecolor"]),
+        edgecolor="black",
+        linewidth=0.12,
+        zorder=2,
+    )
 
-    legend_meta = [
-        (5, "Very High", (235/255,  52/255,  52/255)),
-        (4, "High",      (235/255, 143/255,  52/255)),
-        (3, "Moderate",  (235/255, 183/255,  52/255)),
-        (2, "Low",       (235/255, 235/255,  52/255)),
-        (1, "Very Low",  ( 76/255, 235/255,  52/255)),
-    ]
-    present = {int(round(s)) for s in gdf["risk_score"].dropna()}
+    # Vertical legend: class 5 (red) at top → class 1 (green) at bottom.
     patches = [
         mpatches.Patch(color=c, label=lbl)
-        for score, lbl, c in legend_meta if score in present
+        for _score, lbl, c in reversed(_EXPOSURE_LEGEND)
     ]
-    ax.legend(handles=patches, loc="upper right", fontsize=9,
-              title="Risk Level", title_fontsize=10, framealpha=0.9)
     ax.set_title(title, fontsize=15, fontweight="bold")
-    ax.axis("off")
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
+    place_legend_right(fig, ax, patches, title="", fontsize=9)
+    apply_map_chrome(fig, ax, extent)
+    save_map_figure(fig, out_path)
     logger.info("Risk map saved: %s", out_path.name)
 
 

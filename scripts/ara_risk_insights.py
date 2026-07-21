@@ -24,9 +24,13 @@ Placeholders resolved
   FLOOD_DETECTIVE_1 : buildings risk distribution finding (flood)
   FLOOD_DETECTIVE_2 : DEM / elevation layer finding (flood)
   FLOOD_DETECTIVE_3 : TWI layer finding (flood)
+  FLOOD_DETECTIVE_4 : waterline finding (flood)
+  FLOOD_DETECTIVE_5 : SSP 8.5 long-term finding (flood)
   HEAT_DETECTIVE_1  : buildings risk distribution finding (heat)
   HEAT_DETECTIVE_2  : NDVI layer finding (heat)
   HEAT_DETECTIVE_3  : NDBI layer finding (heat)
+  HEAT_DETECTIVE_4  : LST layer finding (heat)
+  HEAT_DETECTIVE_5  : SSP 8.5 long-term finding (heat)
 
 Context keys consumed
 ─────────────────────
@@ -98,9 +102,11 @@ _LST_BINS = [
     ("Moderate Susceptibility", 25.0, 40.0),
     ("High Susceptibility",     40.0, None),
 ]
+# Impervious inputs are continuous 0–1 cover (CSV: value 0 = pervious, 1 = impervious).
+# Flood & Heat Parametrics: report % area at 0 vs 1 (threshold 0.5 for float rasters).
 _IMPERVIOUS_BINS = [
-    ("Low Susceptibility (Pervious)",    None, 0.5),
-    ("High Susceptibility (Impervious)", 0.5,  None),
+    ("Low Susceptibility (Pervious)",    None, 0.5),  # values < 0.5 (~0)
+    ("High Susceptibility (Impervious)", 0.5,  None),  # values ≥ 0.5 (~1)
 ]
 
 _LULC_CLASSES: dict[int, tuple[str, str]] = {
@@ -123,7 +129,7 @@ _LAYER_CATALOGUE: list[tuple] = [
      "A.1(a)", "app_dem.png",        "terrain",    "Elevation (m)",          "percentile_inverse"),
     ("twi",        "Flood", "Topographic Wetness Index (TWI)",
      "A.1(b)", "app_twi.png",        "Blues",      "TWI",                    "percentile_normal"),
-    ("impervious", "Both", "Impervious Surface Cover",
+    ("impervious", "Both", "Impervious Surface Ratio",
      "A.1(c)", "app_impervious.png", "RdYlGn_r",  "Impervious Cover (0–1)", _IMPERVIOUS_BINS),
     ("ndvi", "Both", "Normalised Difference Vegetation Index (NDVI)",
      "A.2(a)", "app_ndvi.png", "RdYlGn",   "NDVI",   _NDVI_BINS),
@@ -152,9 +158,15 @@ _LAYER_DESCRIPTION: dict[str, str] = {
         "and local slope gradient. Higher TWI values indicate zones where water naturally converges."
     ),
     "impervious": (
-        "The Impervious Surface Cover layer maps every pixel as either fully impervious (value = 1: "
-        "concrete, asphalt, rooftops) or pervious (value = 0: soil, vegetation, open water). "
-        "Impervious surfaces generate near-total surface runoff during rainfall events."
+        "The Impervious Surface Ratio layer maps each location on a 0–1 scale: values near 1 are "
+        "hard cover (rooftops, paved areas, concrete) and values near 0 are pervious surfaces "
+        "(soil, vegetation, open ground). Impervious cover injects more runoff in floods and "
+        "retains more heat in heat assessments."
+    ),
+    "built_env": (
+        "The Built Environment Identifier provides an up-to-date satellite view of the area of "
+        "interest, supporting identification of buildings, road networks, and the broader urban "
+        "fabric used in the resilience assessment."
     ),
     "ndvi": (
         "The Normalised Difference Vegetation Index (NDVI) measures vegetation density and health "
@@ -199,7 +211,16 @@ _LAYER_IMPACT_FALLBACK: dict[str, str] = {
     ),
     "impervious": (
         "Hard surfaces like concrete and rooftops prevent water from soaking into the "
-        "ground, so during heavy rain more of it runs off and increases flooding risk."
+        "ground and also absorb and hold heat. Sites with more impervious cover face "
+        "higher runoff in heavy rain and hotter surface conditions during heatwaves."
+    ),
+    "built_env": (
+        "A clear satellite view of the site helps place buildings and infrastructure in context "
+        "for interpreting flood and heat exposure across the area of interest."
+    ),
+    "lulc": (
+        "Built-up areas and bare ground tend to make the site both hotter (less greenery "
+        "to cool things down) and more flood-prone (less ground for rain to soak into)."
     ),
     "ndvi": (
         "Areas with dense plant cover stay cooler because plants provide shade and "
@@ -214,30 +235,28 @@ _LAYER_IMPACT_FALLBACK: dict[str, str] = {
         "Surface temperatures measured here show which parts of the site heat up the "
         "most. Hot spots tend to be built-up and bare-ground areas."
     ),
-    "lulc": (
-        "Built-up areas and bare ground tend to make the site both hotter (less greenery "
-        "to cool things down) and more flood-prone (less ground for rain to soak into)."
-    ),
     "roads": (
         "The road network includes several types of roads. Low-lying stretches can flood "
         "during heavy rain, which can block evacuation routes and slow emergency access."
     ),
     "waterline": (
-        "Rivers, canals, and water bodies nearby raise flood risk because they can "
-        "overflow during heavy rain and standing water can collect in low spots."
+        "Nearby rivers, canals, and local water bodies shape how floodwater moves through "
+        "the area. When named waterways are present, their proximity and connectivity are "
+        "the main drivers of flood pathway risk."
     ),
 }
 
 _LAYER_EXTRA_CONTEXT: dict[str, str] = {
     "dem": "Elevation is a primary flood susceptibility indicator.",
     "twi": "TWI quantifies the tendency of each location to accumulate water based on terrain shape.",
-    "impervious": "% impervious area = direct measure of runoff-generating fraction of the site.",
+    "impervious": "Impervious Surface Ratio ranges from 0 (pervious) to 1 (fully impervious). Report % area ≈0 vs ≈1.",
+    "built_env": "Satellite basemap of the AOI used as the Built Environment Identifier.",
     "ndvi": "NDVI ranges from -1 to +1. Values above 0.5 indicate dense vegetation.",
     "ndbi": "NDBI ranges from -1 to +1. Higher positive values indicate dense built-up surfaces.",
     "lst": "LST measures radiative surface temperature from thermal infrared imagery.",
     "lulc": "LULC class codes: 1=Water, 2=Trees, 7=Built Area, 8=Bare Ground.",
     "roads": "Road density = total road length / AOI area.",
-    "waterline": "Proximity to active water bodies is the primary fluvial flood exposure indicator.",
+    "waterline": "Name nearby rivers and water bodies when present; emphasise geographic context over counts.",
 }
 
 _LAYER_METRIC_GUIDE: dict[str, dict[str, str]] = {
@@ -247,9 +266,18 @@ _LAYER_METRIC_GUIDE: dict[str, dict[str, str]] = {
     "ndbi": {"Heat":  "High Susceptibility = NDBI > 0.2 (dense built-up = heat accumulation)."},
     "lst":  {"Heat":  "High Susceptibility = LST > 40°C (active thermal hotspot)."},
     "lulc": {"Heat":  "Heat-Contributing: Built Area (7) + Bare Ground (8)."},
-    "impervious": {"Flood": "% impervious > 60% = critical flood risk from surface runoff."},
+    "impervious": {
+        "Flood": (
+            "High Susceptibility = impervious (value ≈ 1 / ≥ 0.5). "
+            "CSV: X% impervious raises runoff; Y% pervious (value ≈ 0) supports infiltration."
+        ),
+        "Heat": (
+            "High Susceptibility = impervious (value ≈ 1 / ≥ 0.5). "
+            "CSV: X% impervious / Y% pervious describes surface cover driving heat retention."
+        ),
+    },
     "roads":      {"Flood": "High road density = high impervious cover = increased surface runoff."},
-    "waterline":  {"Flood": "Dense waterway networks = compound flooding risk."},
+    "waterline":  {"Flood": "Named rivers and canals near the site are primary flood pathway drivers."},
 }
 
 _ROAD_COLORS: dict[str, str] = {
@@ -299,6 +327,42 @@ def _find_tif(directory: Path, key: str) -> Path | None:
 def _find_geojson(directory: Path) -> Path | None:
     matches = sorted(directory.glob("*.geojson"))
     return matches[0] if matches else None
+
+
+def _resolve_aoi_bounds_3857(ctx: dict, map_paths: dict, layers_json: list[dict]):
+    """Return (west, south, east, north) in EPSG:3857 for the Built Env basemap."""
+    import rasterio
+    from rasterio.warp import transform_bounds
+
+    cog_dir = config.COG_DIR
+    for folder in ("Flood", "Heat"):
+        for key in ("dem", "lulc", "ndvi", "twi", "lst", "ndbi", "impervious"):
+            tif = _find_tif(cog_dir / folder, key)
+            if tif is None:
+                continue
+            try:
+                with rasterio.open(tif) as src:
+                    return transform_bounds(src.crs, "EPSG:3857", *src.bounds)
+            except Exception as exc:
+                logger.debug("Bounds from %s failed: %s", tif, exc)
+
+    # Fall back to building GeoJSON bounds
+    for path_key in ("flood_geojson_path", "heat_geojson_path"):
+        gj = ctx.get(path_key)
+        if not gj:
+            continue
+        try:
+            import geopandas as gpd
+            gdf = gpd.read_file(gj)
+            if gdf.crs is None:
+                gdf = gdf.set_crs(4326)
+            gdf = gdf.to_crs(3857)
+            b = gdf.total_bounds  # minx, miny, maxx, maxy
+            return (float(b[0]), float(b[1]), float(b[2]), float(b[3]))
+        except Exception as exc:
+            logger.debug("Bounds from %s failed: %s", path_key, exc)
+
+    return None
 
 
 # ── Percentage formatting helpers ────────────────────────────────────────────
@@ -378,6 +442,18 @@ def _susc_bins(data: np.ndarray, bins: list) -> dict:
     valid = data[~np.isnan(data)]
     if valid.size == 0:
         return {}
+
+    def _fmt_edge(v: float) -> str:
+        """Sarita-style: whole numbers for large values, 1–2 decimals otherwise."""
+        av = abs(v)
+        if av >= 50:
+            return str(int(round(v)))
+        if av >= 10 and abs(v - round(v)) < 0.05:
+            return str(int(round(v)))
+        if av >= 1:
+            return f"{v:.1f}"
+        return f"{v:.2f}"
+
     result = {}
     for label, lo, hi in bins:
         if lo is None:
@@ -388,9 +464,17 @@ def _susc_bins(data: np.ndarray, bins: list) -> dict:
             mask = (valid >= lo) & (valid < hi)
         px  = valid[mask]
         pct = round(100.0 * px.size / valid.size, 1)
+        if px.size:
+            # Observed min/max within this susceptibility bin (matches Sarita tables).
+            range_str = f"{_fmt_edge(float(px.min()))} - {_fmt_edge(float(px.max()))}"
+        else:
+            range_str = "N/A"
         result[label] = {
-            "range": f"{px.min():.3f} – {px.max():.3f}" if px.size else "N/A",
-            "pct": pct, "count": int(px.size),
+            "range": range_str,
+            "pct": pct,
+            "count": int(px.size),
+            "lo": None if lo is None else float(lo),
+            "hi": None if hi is None else float(hi),
         }
     return result
 
@@ -602,9 +686,11 @@ def _ask_claude_vector(
         location  = ", ".join(p for p in [city, country] if p) or "the assessed location"
 
         by_type    = type_stats.get("by_type", {})
+        named      = type_stats.get("named_waterbodies") or []
         dom_type   = max(by_type, key=lambda k: by_type[k].get("count", 0)) if by_type else "N/A"
         dom_pct    = by_type.get(dom_type, {}).get("pct", 0.0)
         total_feat = type_stats.get("total_features", 0)
+        named_text = ", ".join(named[:8]) if named else "No named waterbodies in the input layer"
 
         # Overall site risk — same plumbing as the raster prompt. Vector
         # layers like roads serve both flood AND heat; we surface BOTH
@@ -635,17 +721,48 @@ def _ask_claude_vector(
 
         sentence_4_rule = (
             "Sentence 4: State the priority intervention needed to manage this risk. "
-            "Be specific and prescriptive — name the action and the part of the site it applies to "
-            "(e.g., 'Reinforce the southern access road against flood damage'). "
+            "Be specific and prescribed — name the action and the part of the site it applies to. "
             "Do NOT use phrases like 'the site team should consider', 'we recommend', or "
-            "'consider evaluating'. Write the intervention as a direct, actionable instruction."
+            "'consider evaluating'. Write the intervention as a direct, actionable instruction. "
+            "Still avoid numbers."
             if primary_overall in ("critical", "elevated")
             else "Sentence 4: Omit — stop after Sentence 3."
         )
 
-        type_stats_for_prompt = _round_pcts_recursive(type_stats)
+        is_water = layer_key == "waterline"
+        if is_water:
+            prompt = f"""You are writing the Appendix A "Impact on Results" section of a climate risk assessment report for a business stakeholder.
 
-        prompt = f"""You are writing the Appendix A "Impact on Results" section of a climate risk assessment report for a business stakeholder.
+AUDIENCE: Business stakeholder. NOT a GIS expert.
+
+SITE: {site_name}
+LOCATION: {location}
+HAZARD: {hazard}
+DATA LAYER: {layer_name}
+OVERALL SITE FLOOD RISK: {flood_overall}
+OVERALL SITE HEAT RISK:  {heat_overall}
+
+NAMED WATERBODIES / RIVERS / CANALS (use these in your prose when present):
+{named_text}
+
+--- OVERALL SITE FLOOD RISK PROFILE ---
+{flood_profile}
+
+--- LAYER METRIC GUIDE (internal) ---
+{metric_guide}
+
+Write a paragraph of exactly 3–4 sentences (60–100 words) in natural, human-readable report prose.
+
+Style requirements (critical):
+- Lead with geographic context and named rivers / canals / water bodies when they exist.
+- Prefer ZERO numbers. Do not open with feature counts, percentages, or "100% of features".
+- Do NOT write lines like "All N mapped features are classified as miscellaneous…" or similar.
+- Explain how nearby waterways influence flood pathways and accumulation at {site_name}.
+- Calibrate tone to the overall site flood risk ({flood_overall}).
+- Plain English. Professional. No Markdown. No bullet points. Output only the paragraph."""
+        else:
+            type_stats_for_prompt = _round_pcts_recursive(type_stats)
+            prompt = f"""You are writing the Appendix A "Impact on Results" section of a climate risk assessment report for a business stakeholder.
 
 AUDIENCE: Business stakeholder making decisions about the site. NOT a GIS or climate-science expert. Familiar with "flood" and "heat risk" at a general level. Does NOT know terms like NDVI, TWI, NDBI, evapotranspiration, albedo, pluvial, or fluvial.
 
@@ -679,15 +796,12 @@ Sentence 3: State the practical implication for {hazard.lower()} risk at {site_n
 Rules:
 - Plain English; no specialist jargon.
 - If a technical term is unavoidable, briefly define it inline.
-- Every number cited must come from the data above.
-- Express ALL percentages as whole numbers (e.g., 26%, not 25.9%). For sub-1% non-zero values write "<1%". Never write decimal percentages.
+- Prefer qualitative context over heavy numeric lists.
 - Avoid informal phrasing ('actually', 'pretty', 'kind of', 'a bit') and contractions ('don't', 'can't', 'we'd'). Professional, accessible prose only.
 - Render severity words ('low', 'moderate', 'elevated', 'critical') in lowercase / sentence case in prose. Never write them in all caps.
-- Calibrate your paragraph to the OVERALL SITE risk shown above — not to this single layer's metric in isolation. Do NOT write conclusions stronger or more alarming than the overall site risk justifies. If the layer's metric looks concerning but the overall risk is low or moderate, explain WHY in plain language: other factors (drainage, vegetation, terrain, distance from water, building stock) keep the overall risk in check.
-- Do NOT draw a standalone hazard verdict from one layer's metric. The dominant feature type and overall site risk are authoritative — use the layer's stats to explain WHY, not to override the verdict.
-- Avoid vague qualifiers like 'moderate', 'some', 'a few' unless you immediately back them with a specific number, percentage, or area within the site. Prefer concrete description over hedging.
+- Calibrate your paragraph to the OVERALL SITE risk shown above — not to this single layer's metric in isolation.
 - Tone: clear, accessible, professional. Like explaining to an executive, not a peer scientist.
-- Plain text only. No Markdown formatting — do NOT wrap any word in `**bold**`, `*italic*`, `__underline__`, or `# headings`. The downstream renderer does not process Markdown and will show the asterisks literally.
+- Plain text only. No Markdown formatting.
 - No bullet points. Output only the paragraph."""
 
         logger.info("    Calling Claude for impact text: %s", layer_name)
@@ -734,33 +848,58 @@ def _add_basemap(ax, bounds) -> None:
 
 # ── PNG generation ────────────────────────────────────────────────────────────
 
-def _png_continuous(data, bounds, title, fig_ref, cmap_name, cbar_label, out_path) -> bool:
+def _png_continuous(data, bounds, title, fig_ref, cmap_name, cbar_label, out_path,
+                    vmin: float | None = None, vmax: float | None = None,
+                    view_pad: float | None = None) -> bool:
+    from core.map_chrome import (
+        LEGEND_GAP, LEGEND_WIDTH, MAP_BOTTOM, MAP_TOP,
+        apply_map_chrome, expand_view_bounds, save_map_figure, _map_axes_rect,
+    )
+
     valid = data[~np.isnan(data)]
     if valid.size == 0:
         return False
-    vmin = float(np.percentile(valid, 2))
-    vmax = float(np.percentile(valid, 98))
+    if vmin is None:
+        vmin = float(np.percentile(valid, 2))
+    if vmax is None:
+        vmax = float(np.percentile(valid, 98))
     west, south, east, north = bounds
+    view = expand_view_bounds(bounds, view_pad)
 
-    fig, ax = plt.subplots(figsize=(8, 7))
-    ax.set_xlim(west, east); ax.set_ylim(south, north)
-    _add_basemap(ax, bounds)
+    fig, ax = plt.subplots(figsize=(11, 8.5))
+    # Map + colorbar as side-by-side panels (colorbar must NOT shrink map axes,
+    # or L/R basemap padding looks uneven vs T/B).
+    map_rect = _map_axes_rect(LEGEND_WIDTH * 0.55)
+    ax.set_position(map_rect)
+    ax.set_xlim(view[0], view[2]); ax.set_ylim(view[1], view[3])
+    _add_basemap(ax, view)
     im = ax.imshow(np.ma.masked_invalid(data), extent=[west, east, south, north],
-                   cmap=cmap_name, vmin=vmin, vmax=vmax, alpha=0.70, origin="upper", aspect="auto")
-    cbar = plt.colorbar(im, ax=ax, shrink=0.55, pad=0.02)
-    cbar.set_label(cbar_label, fontsize=9)
+                   cmap=cmap_name, vmin=vmin, vmax=vmax, alpha=0.70,
+                   origin="upper", aspect="auto", interpolation="nearest", zorder=2)
+    # imshow can reset limits — restore the expanded view
+    ax.set_xlim(view[0], view[2]); ax.set_ylim(view[1], view[3])
     ax.set_title(title, fontweight="bold", fontsize=10)
-    ax.set_axis_off(); plt.tight_layout()
-    plt.savefig(out_path, dpi=150, bbox_inches="tight"); plt.close(fig)
+    apply_map_chrome(fig, ax, view)
+    ax.set_xlim(view[0], view[2]); ax.set_ylim(view[1], view[3])
+    pos = ax.get_position()
+    cbar_ax = fig.add_axes([pos.x1 + LEGEND_GAP, pos.y0 + 0.08, 0.025, pos.height - 0.16])
+    cbar = fig.colorbar(im, cax=cbar_ax)
+    cbar.set_label(cbar_label, fontsize=9)
+    save_map_figure(fig, out_path)
     return True
 
 
-def _png_lulc(data, bounds, title, fig_ref, out_path) -> bool:
+def _png_lulc(data, bounds, title, fig_ref, out_path, view_pad: float | None = None) -> bool:
+    from core.map_chrome import (
+        apply_map_chrome, expand_view_bounds, place_legend_right, save_map_figure,
+    )
+
     int_data = np.round(data).astype(np.float64)
     present  = [c for c in _LULC_CLASSES if np.any(int_data == c)]
     if not present:
         return False
     west, south, east, north = bounds
+    view = expand_view_bounds(bounds, view_pad)
     rgba = np.zeros((*data.shape, 4), dtype=np.float32)
     for code in present:
         _, hex_c = _LULC_CLASSES[code]
@@ -768,28 +907,58 @@ def _png_lulc(data, bounds, title, fig_ref, out_path) -> bool:
         mask = int_data == code
         rgba[mask, 0] = r; rgba[mask, 1] = g; rgba[mask, 2] = b; rgba[mask, 3] = 0.85
 
-    fig, ax = plt.subplots(figsize=(8, 7))
-    ax.set_xlim(west, east); ax.set_ylim(south, north)
-    _add_basemap(ax, bounds)
-    ax.imshow(rgba, extent=[west, east, south, north], origin="upper", aspect="auto")
+    fig, ax = plt.subplots(figsize=(11, 8.5))
+    ax.set_xlim(view[0], view[2]); ax.set_ylim(view[1], view[3])
+    _add_basemap(ax, view)
+    ax.imshow(rgba, extent=[west, east, south, north], origin="upper",
+              aspect="auto", interpolation="nearest", zorder=2)
+    ax.set_xlim(view[0], view[2]); ax.set_ylim(view[1], view[3])
     patches = [mpatches.Patch(color=_LULC_CLASSES[c][1], label=_LULC_CLASSES[c][0]) for c in present]
-    ax.legend(handles=patches, loc="lower right", fontsize=7, framealpha=0.85,
-              title="LULC Classes", title_fontsize=8)
     ax.set_title(title, fontweight="bold", fontsize=10)
-    ax.set_axis_off(); plt.tight_layout()
-    plt.savefig(out_path, dpi=150, bbox_inches="tight"); plt.close(fig)
+    place_legend_right(fig, ax, patches, title="LULC Classes")
+    apply_map_chrome(fig, ax, view)
+    save_map_figure(fig, out_path)
     return True
 
 
-def _png_roads(gdf_4326, out_path, title, fig_ref) -> bool:
+def _png_built_env(bounds, out_path, title: str = "Built Environment",
+                   view_pad: float | None = None) -> bool:
+    """Satellite basemap of the AOI only — no thematic overlay."""
+    from core.map_chrome import (
+        apply_map_chrome, expand_map_axes, expand_view_bounds, save_map_figure,
+    )
+
+    try:
+        extent = expand_view_bounds(bounds, view_pad)
+
+        fig, ax = plt.subplots(figsize=(10, 8.5))
+        ax.set_xlim(extent[0], extent[2])
+        ax.set_ylim(extent[1], extent[3])
+        _add_basemap(ax, extent)
+        ax.set_title(title, fontweight="bold", fontsize=10)
+        expand_map_axes(ax)
+        apply_map_chrome(fig, ax, extent)
+        save_map_figure(fig, out_path)
+        return True
+    except Exception as exc:
+        logger.error("PNG failed for built environment: %s", exc)
+        return False
+
+
+def _png_roads(gdf_4326, out_path, title, fig_ref, view_pad: float | None = None) -> bool:
+    from core.map_chrome import (
+        apply_map_chrome, expand_view_bounds, place_legend_right, save_map_figure,
+    )
+
     try:
         gdf = gdf_4326.to_crs(3857)
         b   = gdf.total_bounds
-        px  = (b[2] - b[0]) * 0.05; py = (b[3] - b[1]) * 0.05
+        data_bounds = (b[0], b[1], b[2], b[3])
+        extent = expand_view_bounds(data_bounds, view_pad)
 
-        fig, ax = plt.subplots(figsize=(8, 7))
-        ax.set_xlim(b[0] - px, b[2] + px); ax.set_ylim(b[1] - py, b[3] + py)
-        _add_basemap(ax, (b[0] - px, b[1] - py, b[2] + px, b[3] + py))
+        fig, ax = plt.subplots(figsize=(11, 8.5))
+        ax.set_xlim(extent[0], extent[2]); ax.set_ylim(extent[1], extent[3])
+        _add_basemap(ax, extent)
 
         legend_patches = []
         if "highway" in gdf.columns:
@@ -799,51 +968,55 @@ def _png_roads(gdf_4326, out_path, title, fig_ref) -> bool:
                 legend_patches.append(mpatches.Patch(color=color, label=str(htype).capitalize()))
         else:
             gdf.plot(ax=ax, color="#4DA6FF", linewidth=0.8, alpha=0.85)
-        if legend_patches:
-            ax.legend(handles=legend_patches, loc="lower right", fontsize=7,
-                      framealpha=0.85, title="Road Type", title_fontsize=8)
         ax.set_title(title, fontweight="bold", fontsize=10)
-        ax.set_axis_off(); plt.tight_layout()
-        plt.savefig(out_path, dpi=150, bbox_inches="tight"); plt.close(fig)
+        if legend_patches:
+            place_legend_right(fig, ax, legend_patches, title="Road Type")
+        apply_map_chrome(fig, ax, extent)
+        save_map_figure(fig, out_path)
         return True
     except Exception as exc:
         logger.error("PNG failed for roads: %s", exc)
         return False
 
 
-def _png_waterways(gdf_4326, out_path, title, fig_ref) -> bool:
+def _png_waterways(gdf_4326, out_path, title, fig_ref, view_pad: float | None = None) -> bool:
+    from core.map_chrome import (
+        apply_map_chrome, expand_view_bounds, place_legend_right, save_map_figure,
+    )
+
     try:
         gdf = gdf_4326.to_crs(3857).copy()
         b   = gdf.total_bounds
-        px  = (b[2] - b[0]) * 0.05; py = (b[3] - b[1]) * 0.05
+        data_bounds = (b[0], b[1], b[2], b[3])
+        extent = expand_view_bounds(data_bounds, view_pad)
 
-        fig, ax = plt.subplots(figsize=(8, 7))
-        ax.set_xlim(b[0] - px, b[2] + px); ax.set_ylim(b[1] - py, b[3] + py)
-        _add_basemap(ax, (b[0] - px, b[1] - py, b[2] + px, b[3] + py))
+        fig, ax = plt.subplots(figsize=(11, 8.5))
+        ax.set_xlim(extent[0], extent[2]); ax.set_ylim(extent[1], extent[3])
+        _add_basemap(ax, extent)
 
+        name_col = next((c for c in ("name:en", "name", "Name") if c in gdf.columns), None)
         ftype_col = next((c for c in gdf.columns if "FType" in c), None)
-        water_col = "water" if "water" in gdf.columns else None
+        water_col = next((c for c in ("water", "waterway", "natural") if c in gdf.columns), None)
 
-        if ftype_col or water_col:
-            def _label(r):
-                ft = r[ftype_col] if ftype_col and not _is_null(r.get(ftype_col)) else None
-                wt = r[water_col] if water_col and not _is_null(r.get(water_col)) else None
-                return str(ft or wt or "Other")
-            gdf["_wtype"] = gdf.apply(_label, axis=1)
-        else:
-            gdf["_wtype"] = "Water"
+        def _label(r):
+            if name_col and not _is_null(r.get(name_col)):
+                return str(r[name_col])
+            ft = r[ftype_col] if ftype_col and not _is_null(r.get(ftype_col)) else None
+            wt = r[water_col] if water_col and not _is_null(r.get(water_col)) else None
+            return str(ft or wt or "Water feature")
+
+        gdf["_wtype"] = gdf.apply(_label, axis=1)
 
         legend_patches = []
         for wtype, grp in gdf.groupby("_wtype"):
             color = _WATER_COLORS.get(str(wtype), _WATER_DEFAULT_COLOR)
             grp.plot(ax=ax, color=color, alpha=0.75, linewidth=0.5)
             legend_patches.append(mpatches.Patch(color=color, label=str(wtype)))
-        if legend_patches:
-            ax.legend(handles=legend_patches[:8], loc="lower right", fontsize=7,
-                      framealpha=0.85, title="Water Type", title_fontsize=8)
         ax.set_title(title, fontweight="bold", fontsize=10)
-        ax.set_axis_off(); plt.tight_layout()
-        plt.savefig(out_path, dpi=150, bbox_inches="tight"); plt.close(fig)
+        if legend_patches:
+            place_legend_right(fig, ax, legend_patches[:8], title="Water Feature")
+        apply_map_chrome(fig, ax, extent)
+        save_map_figure(fig, out_path)
         return True
     except Exception as exc:
         logger.error("PNG failed for waterways: %s", exc)
@@ -867,10 +1040,25 @@ def _compute_road_stats(gdf) -> dict:
     return {"total_features": total, "by_type": by_type}
 
 
+def _feature_names(gdf) -> list[str]:
+    """Collect non-empty waterbody / feature names from common OSM columns."""
+    names: list[str] = []
+    seen: set[str] = set()
+    for col in ("name:en", "name", "Name", "NAME"):
+        if col not in gdf.columns:
+            continue
+        for val in gdf[col].dropna().astype(str):
+            cleaned = val.strip()
+            if cleaned and cleaned.lower() not in ("none", "null", "nan") and cleaned not in seen:
+                seen.add(cleaned)
+                names.append(cleaned)
+    return names
+
+
 def _compute_water_stats(gdf) -> dict:
     total = len(gdf)
     ftype_col = next((c for c in gdf.columns if "FType" in c), None)
-    water_col  = "water" if "water" in gdf.columns else None
+    water_col  = next((c for c in ("water", "waterway", "natural") if c in gdf.columns), None)
 
     def _label(row):
         ft = row[ftype_col] if ftype_col and not _is_null(row[ftype_col]) else None
@@ -882,7 +1070,14 @@ def _compute_water_stats(gdf) -> dict:
     for lbl, grp in labels.groupby(labels):
         cnt = len(grp)
         by_type[str(lbl)] = {"count": cnt, "pct": round(100.0 * cnt / total, 1)}
-    return {"total_features": total, "by_type": by_type}
+
+    named = _feature_names(gdf)
+    return {
+        "total_features": total,
+        "by_type": by_type,
+        "named_waterbodies": named,
+        "has_named_features": bool(named),
+    }
 
 
 # ── Core layer processors ─────────────────────────────────────────────────────
@@ -941,6 +1136,10 @@ def _process_raster_layer(
     try:
         if mode == "categorical":
             ok = _png_lulc(data_3857, bounds, display_name, fig_ref, out_path)
+        elif key == "impervious":
+            # Parametrics CSV: values on 0–1 scale — keep colorbar fixed to that domain.
+            ok = _png_continuous(data_3857, bounds, display_name, fig_ref,
+                                 cmap_name, cbar_label, out_path, vmin=0.0, vmax=1.0)
         else:
             ok = _png_continuous(data_3857, bounds, display_name, fig_ref,
                                  cmap_name, cbar_label, out_path)
@@ -1028,7 +1227,19 @@ def _process_vector_layer(
 
     impact = _ask_claude_vector(display_name, hazard_label, type_stats, site_info, key)
     if impact is None:
-        impact = _LAYER_IMPACT_FALLBACK.get(key, "")
+        if key == "waterline":
+            names = type_stats.get("named_waterbodies") or []
+            if names:
+                named = ", ".join(names[:5])
+                impact = (
+                    f"The hydrology around the site is influenced by nearby water features "
+                    f"including {named}, which shape local flood pathways and water accumulation "
+                    f"during intense rainfall."
+                )
+            else:
+                impact = _LAYER_IMPACT_FALLBACK.get(key, "")
+        else:
+            impact = _LAYER_IMPACT_FALLBACK.get(key, "")
 
     azure_url = None
     if ok:
@@ -1123,6 +1334,39 @@ def _run_appendices(ctx: dict) -> dict:
             layer_urls[key] = result["map_url"]
         stats[key]         = result.get("feature_stats", {})
         layer_impacts[key] = result["impact"]
+
+    # Built Environment Identifier — satellite AOI only (no thematic overlay).
+    # Bounds prefer the first available appendix raster/map extent, else building GeoJSON.
+    built_bounds = _resolve_aoi_bounds_3857(ctx, map_paths, layers_json)
+    if built_bounds is not None:
+        logger.info("  Appendix built environment basemap")
+        built_png = "app_built_env.png"
+        built_path = assets / built_png
+        ok_built = _png_built_env(built_bounds, built_path, title="Built Environment")
+        azure_url = None
+        if ok_built:
+            res = save_asset(
+                local_path=built_path,
+                blob_name=f"{base}/assets/{built_png}",
+                content_type="image/png",
+            )
+            azure_url = res.get("azure")
+            map_paths["built_env"] = built_path
+            layer_urls["built_env"] = azure_url or str(built_path)
+            layer_impacts["built_env"] = _LAYER_IMPACT_FALLBACK.get("built_env", "")
+            layers_json.append({
+                "key": "built_env",
+                "hazard": "Both",
+                "name": "Built Environment",
+                "figure_ref": "A.0",
+                "map_local": str(built_path),
+                "map_azure_url": azure_url,
+                "map_url": azure_url or str(built_path),
+                "description": _LAYER_DESCRIPTION.get("built_env", ""),
+                "impact": layer_impacts["built_env"],
+            })
+    else:
+        logger.warning("  Built environment basemap skipped — no AOI bounds available")
 
     # Save 7_appendices.json for compatibility with any downstream readers
     payload = {
@@ -1426,10 +1670,12 @@ def run(context: dict) -> dict:
 
     derived: dict[str, str] = {}
     if risk_for in ("Flood", "Both"):
-        for i, ph in enumerate(["FLOOD_DETECTIVE_1", "FLOOD_DETECTIVE_2", "FLOOD_DETECTIVE_3"]):
+        for i in range(5):
+            ph = f"FLOOD_DETECTIVE_{i + 1}"
             derived[ph] = flood_findings[i] if i < len(flood_findings) else ""
     if risk_for in ("Heat", "Both"):
-        for i, ph in enumerate(["HEAT_DETECTIVE_1", "HEAT_DETECTIVE_2", "HEAT_DETECTIVE_3"]):
+        for i in range(5):
+            ph = f"HEAT_DETECTIVE_{i + 1}"
             derived[ph] = heat_findings[i] if i < len(heat_findings) else ""
 
     logger.info("[Step 4] Derived placeholders: %s", list(derived.keys()))

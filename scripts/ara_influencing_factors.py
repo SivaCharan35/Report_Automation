@@ -77,11 +77,20 @@ _PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
 # Raster-processing logic  (from 6_influencing_factors.py)
 # ═════════════════════════════════════════════════════════════════════════════
 
+# Colours match official IF legend PNGs (yellow / green / orange / red).
 _RISK_RGBA: dict[str, tuple] = {
-    "Very Low": ( 76/255, 235/255,  52/255, 0.75),
-    "Low":      (235/255, 235/255,  52/255, 0.75),
-    "High":     (235/255, 143/255,  52/255, 0.75),
-    "Very High":(235/255,  52/255,  52/255, 0.75),
+    "Very Low": ( 76/255, 230/255,   0/255, 0.75),  # green
+    "Low":      (255/255, 255/255,   0/255, 0.75),  # yellow
+    "High":     (255/255,  85/255,   0/255, 0.75),  # orange
+    "Very High":(230/255,   0/255,   0/255, 0.75),  # red
+}
+
+# Official bivariate legends (black labels over transparent bg).
+_IF_LEGENDS_DIR = Path(__file__).resolve().parent.parent / "core" / "map_assets" / "if_legends"
+_LEGEND_FILES: dict[str, Path] = {
+    "ndvi_twi": _IF_LEGENDS_DIR / "IF_Leg_NDVIxTWI.png",
+    "ndbi_dem": _IF_LEGENDS_DIR / "IF_Leg_NDBIxDEM.png",
+    "lst_ndvi": _IF_LEGENDS_DIR / "IF_Leg_LSTxNDVI.png",
 }
 
 _PAIR_DEFS: dict[str, list[dict]] = {
@@ -92,6 +101,7 @@ _PAIR_DEFS: dict[str, list[dict]] = {
             "title":      "Flood Influencing Factor — NDVI × TWI",
             "key_a":      "ndvi",
             "key_b":      "twi",
+            # Official legend: yellow=L/L, green=H-NDVI/L-TWI, red=L-NDVI/H-TWI, orange=H/H
             "risk_table": {(0,0):"Low", (0,1):"Very High", (1,0):"Very Low", (1,1):"High"},
         },
         {
@@ -100,6 +110,7 @@ _PAIR_DEFS: dict[str, list[dict]] = {
             "title":      "Flood Influencing Factor — NDBI × DEM",
             "key_a":      "ndbi",
             "key_b":      "dem",
+            # Official legend: yellow=L/L, red=H-NDBI/L-DEM, green=L-NDBI/H-DEM, orange=H/H
             "risk_table": {(0,0):"Low", (0,1):"Very Low", (1,0):"Very High", (1,1):"High"},
         },
     ],
@@ -110,6 +121,7 @@ _PAIR_DEFS: dict[str, list[dict]] = {
             "title":      "Heat Influencing Factor — LST × NDVI",
             "key_a":      "lst",
             "key_b":      "ndvi",
+            # Official legend: yellow=L/L, red=H-LST/L-NDVI, green=L-LST/H-NDVI, orange=H/H
             "risk_table": {(0,0):"Low", (0,1):"Very Low", (1,0):"Very High", (1,1):"High"},
         },
     ],
@@ -143,18 +155,19 @@ _COLOUR_CLASS: dict[str, dict] = {
         "col_a_name": "NDVI (Vegetation)",
         "col_b_name": "TWI (Wetness)",
         "rows": [
-            {"color_hex": "EBEB34", "col_a": "Low",  "col_b": "Low",
+            # Matches IF_Leg_NDVIxTWI.png diamond (bottom / left / right / top)
+            {"color_hex": "FFFF00", "col_a": "Low",  "col_b": "Low",
              "interpretation": "Sparse vegetation with low water accumulation; areas with "
                                "limited green cover and good drainage, indicating minimal flood risk."},
-            {"color_hex": "EB3434", "col_a": "High", "col_b": "Low",
-             "interpretation": "Sparse vegetation with high water accumulation; bare or less "
-                               "vegetated land in low-lying areas where water tends to collect, "
-                               "indicating high flood vulnerability."},
-            {"color_hex": "4CEB34", "col_a": "Low",  "col_b": "High",
+            {"color_hex": "4CE600", "col_a": "High", "col_b": "Low",
              "interpretation": "Dense vegetation with low water accumulation; well-vegetated "
                                "areas on slopes or elevated terrain with good drainage and "
                                "minimal waterlogging."},
-            {"color_hex": "EB8F34", "col_a": "High", "col_b": "High",
+            {"color_hex": "E60000", "col_a": "Low",  "col_b": "High",
+             "interpretation": "Sparse vegetation with high water accumulation; bare or less "
+                               "vegetated land in low-lying areas where water tends to collect, "
+                               "indicating high flood vulnerability."},
+            {"color_hex": "FF5500", "col_a": "High", "col_b": "High",
              "interpretation": "Dense vegetation with high water accumulation; vegetated areas "
                                "in depressions where water naturally accumulates, indicating "
                                "moderate to high flood susceptibility."},
@@ -164,15 +177,16 @@ _COLOUR_CLASS: dict[str, dict] = {
         "col_a_name": "Built-up (NDBI)",
         "col_b_name": "Elevation (DEM)",
         "rows": [
-            {"color_hex": "EBEB34", "col_a": "Low",  "col_b": "Low",
+            # Matches IF_Leg_NDBIxDEM.png diamond
+            {"color_hex": "FFFF00", "col_a": "Low",  "col_b": "Low",
              "interpretation": "Semi-open, low-lying areas with moderate flood susceptibility."},
-            {"color_hex": "EB3434", "col_a": "High", "col_b": "Low",
+            {"color_hex": "E60000", "col_a": "High", "col_b": "Low",
              "interpretation": "Dense built-up in low elevation; critical flood-prone pockets "
                                "due to poor drainage."},
-            {"color_hex": "4CEB34", "col_a": "Low",  "col_b": "High",
+            {"color_hex": "4CE600", "col_a": "Low",  "col_b": "High",
              "interpretation": "Elevated but less urbanised; relatively safe zones with "
                                "natural drainage."},
-            {"color_hex": "EB8F34", "col_a": "High", "col_b": "High",
+            {"color_hex": "FF5500", "col_a": "High", "col_b": "High",
              "interpretation": "High built-up on elevated land; less flood risk locally but "
                                "contributes to downstream runoff."},
         ],
@@ -181,16 +195,17 @@ _COLOUR_CLASS: dict[str, dict] = {
         "col_a_name": "LST (Temperature)",
         "col_b_name": "NDVI (Vegetation)",
         "rows": [
-            {"color_hex": "EBEB34", "col_a": "Low",  "col_b": "Low",
+            # Matches IF_Leg_LSTxNDVI.png diamond
+            {"color_hex": "FFFF00", "col_a": "Low",  "col_b": "Low",
              "interpretation": "Areas with low density vegetation, indicating moist ground "
                                "resulting in low LST values."},
-            {"color_hex": "4CEB34", "col_a": "Low",  "col_b": "High",
-             "interpretation": "Areas with high density vegetation, indicating higher levels "
-                               "of moisture and low levels of LST."},
-            {"color_hex": "EB3434", "col_a": "High", "col_b": "Low",
+            {"color_hex": "E60000", "col_a": "High", "col_b": "Low",
              "interpretation": "Likely barren areas with low levels of vegetation and high "
                                "levels of surface temperature."},
-            {"color_hex": "EB8F34", "col_a": "High", "col_b": "High",
+            {"color_hex": "4CE600", "col_a": "Low",  "col_b": "High",
+             "interpretation": "Areas with high density vegetation, indicating higher levels "
+                               "of moisture and low levels of LST."},
+            {"color_hex": "FF5500", "col_a": "High", "col_b": "High",
              "interpretation": "Built areas with high surface temperatures along with vegetation."},
         ],
     },
@@ -330,7 +345,14 @@ def _reproject_rgba(rgba, src_transform, src_crs):
 
 
 def _generate_if_map(binary_a, binary_b, transform, crs,
-                     risk_table, title, out_path) -> None:
+                     risk_table, title, out_path,
+                     legend_path: Path | None = None,
+                     view_pad: float | None = None) -> None:
+    from core.map_chrome import (
+        apply_map_chrome, expand_view_bounds, place_legend_image_right,
+        place_legend_right, save_map_figure,
+    )
+
     rgba = _build_rgba(binary_a, binary_b, risk_table)
     if rgba[:, :, 3].mean() < 0.05:
         logger.warning("  < 5%% valid pixels for '%s' — map skipped", title)
@@ -338,25 +360,34 @@ def _generate_if_map(binary_a, binary_b, transform, crs,
 
     reproj, _dt, left, right, bottom, top = _reproject_rgba(rgba, transform, crs)
     reproj = np.clip(reproj, 0.0, 1.0)
+    data_extent = (left, bottom, right, top)
+    view = expand_view_bounds(data_extent, view_pad)
 
-    fig, ax = plt.subplots(figsize=(14, 12))
-    ax.set_xlim(left, right)
-    ax.set_ylim(bottom, top)
+    fig, ax = plt.subplots(figsize=(11, 9))
+    ax.set_xlim(view[0], view[2])
+    ax.set_ylim(view[1], view[3])
     cx.add_basemap(ax, source=cx.providers.Esri.WorldImagery)
     ax.imshow(reproj, extent=[left, right, bottom, top],
               origin="upper", aspect="auto", zorder=2, interpolation="nearest")
+    ax.set_xlim(view[0], view[2])
+    ax.set_ylim(view[1], view[3])
 
-    present = list(dict.fromkeys(risk_table.values()))
-    order   = ["Very High", "High", "Low", "Very Low"]
-    patches = [mpatches.Patch(color=_RISK_RGBA[lv][:3], label=lv)
-               for lv in order if lv in present]
-    ax.legend(handles=patches, loc="upper right", fontsize=9,
-              title="Risk Level", title_fontsize=10, framealpha=0.9)
     ax.set_title(title, fontsize=14, fontweight="bold")
-    ax.axis("off")
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
+    if legend_path is not None and Path(legend_path).exists():
+        place_legend_image_right(fig, ax, Path(legend_path))
+    else:
+        # Fallback to risk-level patches if official legend PNG is missing
+        present = list(dict.fromkeys(risk_table.values()))
+        order   = ["Very High", "High", "Low", "Very Low"]
+        patches = [mpatches.Patch(color=_RISK_RGBA[lv][:3], label=lv)
+                   for lv in order if lv in present]
+        if patches:
+            place_legend_right(fig, ax, patches, title="Risk Level", fontsize=9)
+        if legend_path is not None:
+            logger.warning("Legend PNG not found (%s) — used risk-level fallback", legend_path)
+
+    apply_map_chrome(fig, ax, view)
+    save_map_figure(fig, out_path)
     logger.info("Influencing factor map saved: %s", out_path.name)
 
 
@@ -558,6 +589,7 @@ def _process_pair(pair: dict, search_dirs: list, ctx: dict) -> dict | None:
         pair["risk_table"],
         f"{pair['title']} — {site}",
         out_png,
+        legend_path=_LEGEND_FILES.get(pair["name"]),
     )
     _save_class_tiff(bin_a, bin_b_aligned, t_a, crs_a, out_tif)
 

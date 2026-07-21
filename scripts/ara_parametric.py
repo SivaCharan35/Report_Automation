@@ -19,12 +19,12 @@ Placeholders resolved
     APPX_NDVI_MAP             APPX_NDBI_MAP         APPX_BUILT_LAYERS_MAP
     APPX_ROAD_MAP             APPX_LST_MAP          APPX_WATER_MAP
 
-  Susceptibility % (Low / Moderate / High):
+  Susceptibility cells (Low / Moderate / High) — Sarita style "(min - max) (N%)":
     APPX_ELEVATION_LOW/MOD/HIGH   APPX_TWI_LOW/MOD/HIGH
     APPX_NDVI_LOW/MOD/HIGH        APPX_NDBI_LOW/MOD/HIGH
     APPX_LST_LOW/MOD/HIGH
 
-  Flood / heat prone % (aggregated from exposure risk counts):
+  Flood / heat prone % (aggregated from exposure risk counts — text or % only):
     APPX_FLOOD_PRONE_LOW/MOD/HIGH
     APPX_FLOOD_PRONE2_LOW/MOD/HIGH  (same values, reused in two tables)
     APPX_HEAT_PRONE_LOW/MOD/HIGH
@@ -66,12 +66,13 @@ _PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
 
 # ── Map placeholder → layer key ───────────────────────────────────────────────
 _MAP_PH: dict[str, str] = {
-    "APPX_BUILT_ENV_MAP":    "lulc",
+    "APPX_BUILT_ENV_MAP":    "built_env",
     "APPX_ELEVATION_MAP":    "dem",
     "APPX_TWI_MAP":          "twi",
     "APPX_NDVI_MAP":         "ndvi",
     "APPX_NDBI_MAP":         "ndbi",
     "APPX_BUILT_LAYERS_MAP": "impervious",
+    "APPX_LULC_MAP":         "lulc",
     "APPX_ROAD_MAP":         "roads",
     "APPX_LST_MAP":          "lst",
     "APPX_WATER_MAP":        "waterline",
@@ -79,14 +80,31 @@ _MAP_PH: dict[str, str] = {
 
 # ── Impact text placeholder → layer key ──────────────────────────────────────
 _IMPACT_PH: dict[str, str] = {
-    "APPX_BUILT_ENV_IMPACT_TEXT":    "lulc",
+    "APPX_BUILT_ENV_IMPACT_TEXT":    "built_env",
     "APPX_DEM_IMPACT_TEXT":          "dem",
     "APPX_NDVI_IMPACT_TEXT":         "ndvi",
     "APPX_NDBI_IMPACT_TEXT":         "ndbi",
     "APPX_BUILT_LAYERS_IMPACT_TEXT": "impervious",
+    "APPX_LULC_IMPACT_TEXT":         "lulc",
     "APPX_ROAD_IMPACT_TEXT":         "roads",
     "APPX_LST_IMPACT_TEXT":          "lst",
     "APPX_WATER_IMPACT_TEXT":        "waterline",
+}
+
+# ── Description placeholder → layer key (static copy from appendix layers) ───
+_DESC_PH: dict[str, str] = {
+    "APPX_BUILT_ENV_DESCRIPTION":    "built_env",
+    "APPX_ELEVATION_DESCRIPTION":    "dem",
+    "APPX_DEM_DESCRIPTION":          "dem",
+    "APPX_TWI_DESCRIPTION":          "twi",
+    "APPX_NDVI_DESCRIPTION":         "ndvi",
+    "APPX_NDBI_DESCRIPTION":         "ndbi",
+    "APPX_BUILT_LAYERS_DESCRIPTION": "impervious",
+    "APPX_IMPERVIOUS_DESCRIPTION":   "impervious",
+    "APPX_LULC_DESCRIPTION":         "lulc",
+    "APPX_ROAD_DESCRIPTION":         "roads",
+    "APPX_LST_DESCRIPTION":          "lst",
+    "APPX_WATER_DESCRIPTION":        "waterline",
 }
 
 # ── Susceptibility % placeholder → (layer_key, class_label) ──────────────────
@@ -129,7 +147,11 @@ def _prone_pcts(risk_counts: dict) -> tuple[str, str, str]:
 
 
 def _susc_pct(appendix_stats: dict, layer_key: str, class_label: str) -> str:
-    """Return 'X.X%' for one susceptibility class of one layer."""
+    """Return '(min - max) (N%)' for one susceptibility class — Sarita table style.
+
+    Uses the same 3-bin break logic already computed in ara_risk_insights
+    (pixel range within each Low/Moderate/High bin + share of AOI).
+    """
     layer_stats = appendix_stats.get(layer_key, {})
     entry = layer_stats.get(class_label)
     if entry is None:
@@ -139,12 +161,20 @@ def _susc_pct(appendix_stats: dict, layer_key: str, class_label: str) -> str:
         )
     if entry is None:
         return "—"
-    return f"{entry.get('pct', 0.0):.1f}%"
+    pct = entry.get("pct", 0.0)
+    pct_str = f"{int(round(pct))}%"
+    rng = (entry.get("range") or "").strip()
+    if not rng or rng == "N/A":
+        return f"({pct_str})"
+    # Normalise en-dash / commas to " - " for a consistent cell string.
+    rng = rng.replace("–", " - ").replace(",", " - ")
+    rng = " - ".join(part.strip() for part in rng.split(" - ") if part.strip())
+    return f"({rng}) ({pct_str})"
 
 
 # Reverse lookup: every placeholder we know about → its parent layer key.
 # Used by the missing-layer subsection pruner below.
-_PH_TO_LAYER: dict[str, str] = {**_MAP_PH, **_IMPACT_PH}
+_PH_TO_LAYER: dict[str, str] = {**_MAP_PH, **_IMPACT_PH, **_DESC_PH}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -304,6 +334,26 @@ def run(context: dict) -> dict:
     # Impact texts
     for ph, layer_key in _IMPACT_PH.items():
         derived[ph] = appendix_layer_impacts.get(layer_key, "")
+
+    # Static layer descriptions (from appendix layers JSON or hard-coded fallbacks)
+    layers_by_key = {
+        layer.get("key", ""): layer
+        for layer in (ctx.get("appendix_layers_json") or [])
+        if isinstance(layer, dict)
+    }
+    for ph, layer_key in _DESC_PH.items():
+        desc = ""
+        layer = layers_by_key.get(layer_key)
+        if layer:
+            desc = layer.get("description") or ""
+        if not desc:
+            # Fallback: import descriptions from risk_insights catalogue
+            try:
+                from scripts.ara_risk_insights import _LAYER_DESCRIPTION
+                desc = _LAYER_DESCRIPTION.get(layer_key, "")
+            except Exception:
+                desc = ""
+        derived[ph] = desc
 
     # Susceptibility percentages
     for ph, (layer_key, class_label) in _SUSC_PH.items():
